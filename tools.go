@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -16,7 +17,7 @@ const randomStringSource = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
 // Tools is the type used to instantiate this module. Any variable of this type will have access
 // to all the methods with the reciever *Tools
 type Tools struct {
-	MaxFileSize int64
+	MaxFileSize      int64
 	AllowedFileTypes []string
 }
 
@@ -133,7 +134,6 @@ func (t *Tools) UploadFiles(r *http.Request, uploadDir string, rename ...bool) (
 				var outfile *os.File
 				defer outfile.Close()
 
-
 				if outfile, err = os.Create(filepath.Join(uploadDir, uploadedFile.NewFileName)); err != nil {
 					return nil, err
 				} else {
@@ -168,4 +168,22 @@ func (t *Tools) CreateDirIfNotExist(filePath string) error {
 		}
 	}
 	return nil
+}
+
+// slugify returns a slugified version of the string
+func (t *Tools) Slugify(s string) (string, error) {
+	if s == "" {
+		return "", errors.New("the string is empty")
+	}
+
+	// use regex to replace all non-alphanumeric characters with a dash
+	var re = regexp.MustCompile("[^a-zA-Z0-9]+")
+
+	slug := strings.Trim(re.ReplaceAllString(strings.ToLower(s), "-"), "-")
+
+	if len(slug) == 0 {
+		return "", errors.New("after slugifying the string, it is empty")
+	}
+
+	return slug, nil
 }
