@@ -2,6 +2,7 @@ package toolkit
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,8 +18,10 @@ const randomStringSource = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
 // Tools is the type used to instantiate this module. Any variable of this type will have access
 // to all the methods with the reciever *Tools
 type Tools struct {
-	MaxFileSize      int64
-	AllowedFileTypes []string
+	MaxFileSize        int64
+	AllowedFileTypes   []string
+	MaxJSONSize        int
+	AllowUnknownFields bool
 }
 
 // RandomString returns a string of random characters of length n, using randomStringSource
@@ -188,7 +191,6 @@ func (t *Tools) Slugify(s string) (string, error) {
 	return slug, nil
 }
 
-
 // DownloadStaticFile downloads a static file from the web and saves it to a specified directory
 func (t *Tools) DownloadStaticFile(w http.ResponseWriter, r *http.Request, p, file, displayName string) {
 	// join the path and file name
@@ -199,3 +201,74 @@ func (t *Tools) DownloadStaticFile(w http.ResponseWriter, r *http.Request, p, fi
 	// write the file to the response
 	http.ServeFile(w, r, fp)
 }
+
+// JSONResponse is a struct that is used to return JSON around
+type JSONResponse struct {
+	Error   bool        `json:"error"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+// ReadJSON
+func (t *Tools) ReadJSON(w http.ResponseWriter, r *http.Request, data interface{}) error {
+	// limit the request body to 1MB
+	maxBytes := 1024 * 1024
+
+	if t.MaxJSONSize != 0 {
+		maxBytes = t.MaxJSONSize
+	}
+	// read the request body
+	r.Body = http.MaxBytesReader(w, r.Body, int64(maxBytes))
+
+	// decode the request body into the data interface
+	dec := json.NewDecoder(r.Body)
+
+	// check if !t.AllowUnknownFields, dont allow unknown fields
+	if !t.AllowUnknownFields {
+		dec.DisallowUnknownFields()
+	}
+
+	err := dec.Decode(data)
+
+	if err != nil {
+		var syntaxError *json.SyntaxError
+		var unmarshalTypeError *json.UnmarshalTypeError
+		var invalidUnmarshalError *json.InvalidUnmarshalError
+
+		switch {
+		case errors.As(err, &syntaxError):
+			return fmt.Errorf("request body contains badly-formed JSON (at position %d)", syntaxError.Offset)
+
+		case errors.Is(err, io.ErrUnexpectedEOF):
+			return errors.New("request body contains badly-formed JSON")
+
+		case errors.As(err, &unmarshalTypeError):
+			if unmarshalTypeError.Field != "" {
+				return fmt.Errorf("request body contains an invalid value for the %q field (at position %d)", unmarshalTypeError.Field, unmarshalTypeError.Offset)
+			}
+			return fmt.Errorf("request body contains an invalid value (at position %d)", unmarshalTypeError.Offset)
+		case errors.Is(err, io.EOF):
+			return errors.New("request body must not be empty")
+		case strings.HasPrefix(err.Error(), "json: unknown field "):
+			fieldName := strings.TrimPrefix(err.Error(), "json: unknown field ")
+			return fmt.Errorf("request body contains unknown field %s", fieldName)
+		case err.Error() == "http: request body too large":
+			return fmt.Errorf("request body must not be larger than %d bytes", maxBytes)
+		case errors.As(err, &invalidUnmarshalError):
+			return fmt.Errorf("error unmarshalling request body: %s", err.Error())
+		default:
+			return err
+		}
+	}
+
+	// check if its not more than one json object
+	err = dec.Decode(&struct{}{})
+
+	if err != io.EOF {
+		return errors.New("the request body must only contain a single JSON object")
+	}
+
+	return nil
+
+}
+
