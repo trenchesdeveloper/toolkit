@@ -187,3 +187,15 @@ func (t *Tools) Slugify(s string) (string, error) {
 
 	return slug, nil
 }
+
+
+// DownloadStaticFile downloads a static file from the web and saves it to a specified directory
+func (t *Tools) DownloadStaticFile(w http.ResponseWriter, r *http.Request, p, file, displayName string) {
+	// join the path and file name
+	fp := filepath.Join(p, file)
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", displayName))
+
+	// write the file to the response
+	http.ServeFile(w, r, fp)
+}
