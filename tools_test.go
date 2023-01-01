@@ -17,6 +17,45 @@ import (
 	"testing"
 )
 
+type RounfTripFunc func(req *http.Request) *http.Response
+
+func (f RounfTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req), nil
+}
+
+func NewTestClient(fn RounfTripFunc) *http.Client {
+	return &http.Client{
+		Transport: RounfTripFunc(fn),
+	}
+}
+
+func TestTools_PushJSONToRemote(t *testing.T) {
+	client := NewTestClient(func(req *http.Request) *http.Response {
+		// Test request parameters
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body: 	 ioutil.NopCloser(bytes.NewBufferString("OK")),
+			Header:     make(http.Header),
+		}
+	})
+
+
+	var testTools Tools
+
+	var foo struct {
+		Bar string `json:"bar"`
+	}
+
+	foo.Bar = "baz"
+
+	_, _, err := testTools.PushJSONToRemote("http://example.com", foo, client)
+
+	if err != nil {
+		t.Error(err)
+	}
+	
+}
+
 func TestTools_RandomString(t *testing.T) {
 	var testTools Tools
 
