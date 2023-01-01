@@ -2,6 +2,8 @@ package toolkit
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -292,6 +294,70 @@ func TestTools_ReadJSON(t *testing.T){
 
 		req.Body.Close()
 	}
+}
 
+func TestTools_WriteJSON(t *testing.T){
+
+	var testTools Tools
+
+	// create a recorder
+	rr := httptest.NewRecorder()
+
+	// create a payload
+	payload := JSONResponse {
+		Message: "test",
+		Error: false,
+	}
+
+	// create a header
+	header := http.Header{}
+	header.Add("FOO", "BAR")
+
+	// write the json
+	err := testTools.WriteJSON(rr, http.StatusOK, payload, header)
+
+	if err != nil {
+		t.Errorf("error writing json: %s", err)
+	}
+
+
+}
+
+func TestTools_ErrorJSON(t *testing.T){
+
+	var testTools Tools
+
+	// create a RESPONSE recorder
+	rr := httptest.NewRecorder()
+
+	// write the json
+	err := testTools.ErrorJSON(rr, errors.New("some error"), http.StatusBadRequest)
+
+	if err != nil {
+		t.Errorf("error writing json: %s", err)
+	}
+
+	var payload JSONResponse
+
+	// read the json
+	decoded := json.NewDecoder(rr.Body)
+
+	err = decoded.Decode(&payload)
+
+	if err != nil {
+		t.Errorf("error decoding json: %s", err)
+	}
+
+	if !payload.Error {
+		t.Error("error not set")
+	}
+
+	if payload.Message != "some error" {
+		t.Error("wrong message")
+	}
+
+	if rr.Code != http.StatusBadRequest {
+		t.Error("wrong status code")
+	}
 
 }

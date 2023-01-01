@@ -209,7 +209,7 @@ type JSONResponse struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// ReadJSON
+// ReadJSON reads the request body and decodes it into the data interface
 func (t *Tools) ReadJSON(w http.ResponseWriter, r *http.Request, data interface{}) error {
 	// limit the request body to 1MB
 	maxBytes := 1024 * 1024
@@ -272,3 +272,49 @@ func (t *Tools) ReadJSON(w http.ResponseWriter, r *http.Request, data interface{
 
 }
 
+// WriteJSON writes JSON to the response(client)
+func (t *Tools) WriteJSON(w http.ResponseWriter, statusCode int, data interface{}, headers ...http.Header) error {
+	out, err := json.Marshal(data)
+
+	if err != nil {
+		return err
+	}
+
+	//
+	if headers != nil {
+		for key, value := range headers[0] {
+			w.Header()[key] = value
+		}
+	}
+	// set the Content-Type header
+	w.Header().Set("Content-Type", "application/json")
+
+	// write the status code
+	w.WriteHeader(statusCode)
+
+	// write the JSON response
+	_, err = w.Write(out)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+//ErrorJSON writes an error to the response
+func (t *Tools) ErrorJSON(w http.ResponseWriter, err error, status ...int) error {
+	statusCode := http.StatusInternalServerError
+
+	if status != nil {
+		statusCode = status[0]
+	}
+
+	var payload JSONResponse
+
+	payload.Error = true
+	payload.Message = err.Error()
+
+	return t.WriteJSON(w, statusCode, payload)
+
+}
